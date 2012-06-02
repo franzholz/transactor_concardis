@@ -1,0 +1,7 @@
+<paymentmethods>
+	<concardis_webpayment_standard type="array">
+		<label>LLL:EXT:transactor_concardis/paymentmethods.xml:webpayment_standard</label>
+		<type>directdebit</type>
+		<iconpath>EXT:transactor_concardis/res/08-25-030_Banner_Kundenwebsite_234x60_v2_3.gif</iconpath>
+	</concardis_webpayment_standard>
+</paymentmethods>

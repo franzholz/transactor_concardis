@@ -1,0 +1,8 @@
+# cat = ConCardis/general; type=string; label=PSPID: Ihr Name im ConCardis System
+PSPID = JOH316
+# cat = ConCardis/general; type=string; label= URI path: only the path part of the URI for the ConCardis Gateway for processing. Replace 'test' by 'prod' after your testing has been successfull.
+provideruri = https://secure.payengine.de/ncol/test/
+# cat = ConCardis/general; type=string; label=SHA-1 IN Signatur: password with at least 16 characters and numbers
+SHA1 = !Johannes Evangelium 3,16!
+# cat = ConCardis/general; type=string; label=SHA-1 OUT Signatur: password with at least 16 characters and numbers
+SHA1OUT = !Johannes Evangelium 3,16!
