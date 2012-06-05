@@ -1,5 +1,12 @@
 (add new changes on top of this file)
 
+2012-06-05 Franz Holzinger  <franz@fholzinger.com>
+
+	* the following lines are contributions sent by imc (Patricia Schneider)
+	* modifications in the SHA key generation
+	* add more comments
+	* add status and error code files
+
 2011-02-17 Franz Holzinger  <franz@fholzinger.com>
 
 	* Initial release

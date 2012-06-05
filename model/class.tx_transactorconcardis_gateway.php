@@ -78,25 +78,29 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 	}
 
 
-	/* SHA algorithm */
-	public function createHash ($sha1, $paramArray, $bSort = TRUE) {
-
-		$upperFieldsArray = array_change_key_case($paramArray, CASE_UPPER);
-
-		$shaFieldArray = array_keys($upperFieldsArray);
-		if ($bSort) {
-			asort($shaFieldArray);
-		}
+	// SHA Algorithm (Following Concardis-PDF Chapter 10.1)
+	public function createHash ($sha1, $paramArray) {
 		$shaString = '';
 
-		foreach ($shaFieldArray as $shaField) {
+		// change keys into upper case letters
+		$upperFieldsArray = array_change_key_case($paramArray, CASE_UPPER);
 
-			$value = $upperFieldsArray[$shaField];
-			$shaString .= $shaField . '=' . $value . $sha1;
+		// Sort the keys in alphabetical order
+		$shaFieldsArray = $upperFieldsArray;
+		ksort($shaFieldsArray, SORT_STRING);
+		unset($upperFieldsArray);
+
+		// Add the SHA Passphrase to FELD=VALUE
+		foreach ($shaFieldsArray as $field => $value) {
+			$shaString .= $field . '=' . $value . $sha1;
 		}
-		$result = bin2hex(mhash(MHASH_SHA1, $shaString)); // Einmalige Zeichenkette zur Prüfung der Auftragsdaten.
 
-		return $result;
+		// unique character sequence vor the validation of the control data
+		$digest = strtoupper(bin2hex(mhash(MHASH_SHA512, $shaString)));
+
+		// Hint: Test using https://secure.payengine.de/ncol/test/testsha.asp
+
+		return $digest;
 	}
 
 
@@ -114,11 +118,28 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 		$detailsArray = $this->getDetails();
 		$address = $detailsArray['address'];
 		$total = $detailsArray['total'];
+		$basket = $detailsArray['basket'];
+
+		$description = array();
+		foreach($basket as $itemId => $itemData) {
+			$itemName = $itemData[0]['item_name'];
+			$itemQuantitiy = $itemData[0]['quantity'];
+
+			$description[] = $itemQuantitiy . "x - {$itemName} (ID: {$itemId})";
+		}
+		$description = implode(' ### ', $description);
 
 		$fieldsArray = array();
 		$fieldsArray = $this->config;
 
+		// *************************************************************************************************************
+		//	HINWEIS: Die Kommentare zu den Feldern sind aus der Implementierungs-PDF von Concardis!
+		//
+		//	HINWEIS 2: Das Layout wird erstmal nicht angepasst!
+		// *************************************************************************************************************
+
 		if ($conf['PSPID'] != '') {
+			// Name Ihres Händlerkontos in unserem System.
 			$fieldsArray['PSPID'] = $conf['PSPID'];
 		}
 		if ($conf['SHA1'] != '') {
@@ -126,25 +147,80 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 		}
 
 		$nFieldsArray = array();
+
+		// Ihre eindeutige Bestellnummer (Händlerreferenz). Das System sorgt dafür, dass für die gleiche Bestellung die
+		// Zahlung nicht zweimal angefragt wird. Die orderID muss dynamisch zugewiesen werden.
 		$nFieldsArray['orderID'] = $detailsArray['transaction']['orderuid'];
+
+		// Zu zahlender Betrag, MULTIPLIZIERT MIT 100, da die Betragsangabe keine Dezimalstellen oder andere
+		// Trennzeichen enthalten darf. Der Betrag muss dynamisch zugewiesen werden.
 		$nFieldsArray['amount'] = $total['amounttax'] * 100;
+
+		// Alphanumerischer Währungswert nach ISO, beispielsweise: EUR, USD, GBP, CHF, ...
 		$nFieldsArray['currency'] = 'EUR';
+
+		// Landessprache des Kunden, beispielsweise: en_US, nl_NL, fr_FR, ...
 		$nFieldsArray['language'] = 'de_DE';
+
+		// Name des Kunden. Wird aus dem Feld cardholder name der Kreditkartendaten übernommen und ist noch bearbeitbar.
 		$nFieldsArray['CN'] = $address['person']['first_name'] . ' ' . $address['person']['last_name'];
+
+		// E-Mail-Adresse des Kunden.
 		$nFieldsArray['EMAIL'] = $address['person']['email'];
+
+		// Straße und Hausnummer des Kunden.
 		$nFieldsArray['owneraddress'] = $address['person']['address1'];
+
+		// PLZ des Kunden.
 		$nFieldsArray['ownerZIP'] = $address['person']['zip'];
+
+		// Ortsname des Kunden.
 		$nFieldsArray['ownertown'] = $address['person']['city'];
+
+		// Land des Kunden.
 		$nFieldsArray['ownercty'] = $address['person']['country'];
-		$nFieldsArray['ownerteno'] = $address['person']['phone'];
 
-		$nFieldsArray['Accepturl'] = $detailsArray['transaction']['successlink'];
-		$nFieldsArray['Cancelurl'] = $detailsArray['transaction']['returi'];
-		$nFieldsArray['Declineurl'] = $detailsArray['transaction']['faillink'];
+		// Telefonnummer des Kunden.
+		$nFieldsArray['ownertelno'] = $address['person']['phone'];
 
-		foreach ($nFieldsArray as $k => $v) {
-			if ($v != '') {
-				$fieldsArray[$k] = $v;
+		// Beschreibung der Bestellung.
+		$nFieldsArray['COM'] = $description;
+
+		// (Absolute) URL Ihres Katalogs. Wenn die Transaktion verarbeitet wurde, wird Ihr Kunde aufgefordert, durch
+		// Anklicken einer Schaltfläche zu dieser URL zurückzukehren.
+		$nFieldsArray['catalogurl'] = '';
+
+		// (Absolute) URL Ihrer Homepage. Wenn die Transaktion verarbeitet wurde, wird Ihr Kunde aufgefordert, durch
+		// Anklicken einer Schaltfläche zu dieser URL zurückzukehren.
+		// Wenn Sie den Wert "NONE" senden, wird die Schaltfläche, die zur Händler-Webseite zurückführt, ausgeblendet.
+		$nFieldsArray['homeurl'] = '';
+
+		// URL der Webseite, die dem Kunden angezeigt werden soll, wenn die Zahlung autorisiert (Status 5), gespeichert
+		// (Status 4) oder akzeptiert (Status 9) wurde oder auf die Annahme wartet (abwartend, Status 41, 51 oder 91).
+		$nFieldsArray['accepturl'] = $detailsArray['transaction']['successlink'];
+
+		// URL der Webseite, die dem Kunden angezeigt werden soll, wenn der Akzeptanzpartner die Autorisierung häufiger
+		// als maximal zulässig verweigert hat (Status 2 oder 93).
+		$nFieldsArray['declineurl'] = $detailsArray['transaction']['faillink'];
+
+		// URL der Webseite, die dem Kunden angezeigt werden soll, wenn das Ergebnis des Zahlungsvorgangs unsicher ist
+		// (Status 52 und 92).
+		// Wenn dieses Feld leer ist, bekommt der Kunde stattdessen die accepturl angezeigt.
+		$nFieldsArray['exceptionurl'] = '';
+
+		// URL der Webseite, die dem Kunden angezeigt werden soll, wenn er den Zahlungsvorgang abbricht Status 1).
+		// Wenn dieses Feld leer ist, bekommt der Kunde stattdessen die declineurl angezeigt.
+		$nFieldsArray['cancelurl'] = $detailsArray['transaction']['returi'];
+
+		// URL der Webseite, die dem Kunden angezeigt werden soll, wenn er auf unserer sicheren Zahlungsseite die
+		// Zurück-Schaltfläche anklickt.
+		$nFieldsArray['cancelurl'] = $detailsArray['transaction']['returi'];
+
+		// Parameter ohne Inhalt fliegen raus
+		foreach ($nFieldsArray as $key => $value) {
+
+			if ($value != '') {
+				$fieldsArray[$key] = $value;
 			}
 		}
 
@@ -152,10 +228,14 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 		// Set article vars if selected
 		// *******************************************************
 
-		if (is_array($detailsArray) && isset($detailsArray['options']) && is_array($detailsArray['options'])) {
-			foreach ($detailsArray['options'] as $k => $v) {
-				if ($v != '') {
-					$fieldsArray[$k] = $v;
+		if (
+			is_array($detailsArray) &&
+			isset($detailsArray['options']) &&
+			is_array($detailsArray['options'])
+		) {
+			foreach ($detailsArray['options'] as $key => $value) {
+				if ($value != '') {
+					$fieldsArray[$key] = $value;
 				}
 			}
 		}
@@ -163,7 +243,9 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 		$sha1 = $fieldsArray['SHA1'];
 		unset($fieldsArray['SHA1']); // do not publish the secret key
 
-		$fieldsArray['SHASign'] = $this->createHash($sha1, $fieldsArray); // Einmalige Zeichenkette zur Prüfung der Auftragsdaten.
+		// Setze SHA-IN-Signatur (Concardis-PDF-Kapitel 10.1)
+		// -> Einmalige Zeichenkette zur Prüfung der Auftragsdaten.
+		$fieldsArray['SHASign'] = $this->createHash($sha1, $fieldsArray);
 
 		return $fieldsArray;
 	}
@@ -187,18 +269,31 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 			if (is_array($paramArray)) {
 				$callExt = $this->getCallingExtension();
 				$theReference = $this->generateReferenceUid($paramArray['orderID'], $callExt);
-				if ($reference == $theReference && $paramArray['NCERROR'] == 0) {
+
+				// Wenn Status ok -> genehmigt
+				if (
+					$reference == $theReference &&
+					( $paramArray['STATUS'] == 5 || $paramArray['STATUS'] == 9 )
+				) {
 					$result['state'] = TX_TRANSACTOR_TRANSACTION_STATE_APPROVE_OK;
 					$result['amount'] = doubleval($paramArray['amount']);
 					$result['message'] = $TYPO3_DB->fullQuoteStr(
 						$paramArray['CN'] . ';' . $paramArray['BRAND'] . ';' . $paramArray['CARDNO'] . ';' . $paramArray['PAYID'] . ';' . $paramArray['ED'] . ';' . $paramArray['TRXDATE'],
 						'tx_transactor_transactions');
 				} else {
-					$result = $this->transaction_getResultsMessage(TX_TRANSACTOR_TRANSACTION_STATE_APPROVE_NOK, 'Payment has failed. (' . $paramArray['NCERROR'] . ')');
+					// Erhalte Status- und Fehlernachrichten
+					$message = 'Status: {' . $paramArray['STATUS'] . '} - ' . $this->getStatusMessage($paramArray['STATUS']);
+
+					if (!empty($paramArray['NCERROR'])) {
+						$message .= ', Error: {' . $paramArray['NCERROR'] . '} - ' . $this->getErrorMessage($paramArray['NCERROR']);
+					}
+					$result = $this->transaction_getResultsMessage(TX_TRANSACTOR_TRANSACTION_STATE_APPROVE_NOK,
+						'Payment has failed. ({' . $message . '})');
 				}
 			} else {
-				$result = $this->transaction_getResultsMessage(TX_TRANSACTOR_TRANSACTION_STATE_APPROVE_NOK, 'Bei der Bezahlung ist ein Fehler aufgetreten.');
+				$result = $this->transaction_getResultsMessage(TX_TRANSACTOR_TRANSACTION_STATE_IDLE, 'Keine Daten an Concardis übermittelt.');
 			}
+
 			$res = $TYPO3_DB->exec_UPDATEquery(
 				'tx_transactor_transactions',
 				'reference = ' . $TYPO3_DB->fullQuoteStr($reference, 'tx_transactor_transactions'),
@@ -210,12 +305,31 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 	}
 
 
-	public function transaction_failed ($resultsArray) {
+	private function getErrorMessage($errorCode) {
 
-		if ($resultsArray['status'] == TX_TRANSACTOR_TRANSACTION_STATE_APPROVE_NOK)
-			return TRUE;
+		// Von: https://secure.payengine.de/ncol/paymentinfos5.asp
+		require_once("include_error_codes.php");
 
-		return FALSE;
+		if(isset($errorCodes[$errorCode])) {
+			return $errorCodes[$errorCode];
+		}
+		else {
+			return "Unknown error!";
+		}
+ 	}
+
+
+	private function getStatusMessage($status) {
+
+		// Von: https://secure.payengine.de/ncol/paymentinfos5.asp
+		require_once("include_status_codes.php");
+
+		if(isset($statusMessages[$status])) {
+			return $statusMessages[$status];
+		}
+		else {
+			return "Unknown status!";
+		}
 	}
 
 
@@ -230,28 +344,66 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 
 		if ($orderID) {
 			$paramArray = array();
-			$paramTypeArray = array(
-				'orderID', 'currency', 'amount', 'PM', 'ACCEPTANCE', 'STATUS', 'CARDNO',
-				'ED', 'CN', 'TRXDATE', 'PAYID', 'NCERROR', 'BRAND', 'IPCTY', 'CCCTY',
-				'ECI', 'CVCCheck', 'AAVCheck', 'VC', 'IP', 'SHASIGN'
+// 			$paramTypeArray = array(
+// 				'orderID', 'currency', 'amount', 'PM', 'ACCEPTANCE', 'STATUS', 'CARDNO',
+// 				'ED', 'CN', 'TRXDATE', 'PAYID', 'NCERROR', 'BRAND', 'IPCTY', 'CCCTY',
+// 				'ECI', 'CVCCheck', 'AAVCheck', 'VC', 'IP', 'SHASIGN'
+
+			$paramTypeArray = array (
+				'orderID',    // Ihre Bestellnummer
+				'amount',     // Betrag der Bestellung (nicht mit 100 multipliziert)
+				'currency',   // Währung der Bestellung
+				'PM',         // Zahlungsmethode
+				'ACCEPTANCE', // Vom Akzeptanzpartner zurückgesendeter Akzeptanzwert
+				'STATUS',     // Transaktionsstatus (siehe Anhang 3 mit einem kurzen Statusüberblick)
+				'CARDNO',     // Maskierte Kartennummer
+				'PAYID',      // Bezahlungs ID als Referenz in unserem System
+				'NCERROR',    // Fehlerwert
+				'BRAND',      // Kartenmarke (unser System leitet sie von der Kartennummer ab)
+				'ED',         // Kartenverfallsdatum
+				'TRXDATE',    // Transaktionsdatum
+				'CN',         // Name von Karteninhaber bzw. Kunde
+				'IP',         // IP
+				'SHASIGN',	  // Von unserem System berechneter SHA-Ausgangscode (wenn SHA-OUT
+							  // konfiguriert ist)
+				'complus',	  // Feld für die Einreichung eines Wertes, den Sie in der Post-Sale-
+							  // Anfrage zurückgesendet haben möchten.
+				'paramplus'	  // Feld für die Einreichung einiger Parameter und deren Werte, die
+							  // Sie in der Post-Sale-Anfrage zurückgesendet haben möchten.
+							  //
+							  // Das Feld paramplus ist als solches nicht Bestandteil der Para-
+							  // meter in der Rückmeldung. Stattdessen werden die Parameter bzw.
+							  // Werte, die Sie in diesem Feld senden, analysiert und die sich
+							  // daraus ergebenden Parameter werden der HTTP-Anfrage beigefügt.
 			);
 
 			foreach ($paramTypeArray as $type) {
 				$paramArray[$type] = t3lib_div::_GP($type);
 			}
 
+			// Bearbeite nur gesetzte Werte
+			$shaFieldsArray = array();
+			foreach ($paramArray as $key => $value) {
+
+				if ($value != '') {
+					$shaFieldsArray[$key] = $value;
+				}
+			}
+
 			$sha1 = $conf['SHA1OUT'];
 
+			// Erhalte SHASign von Concardis
 			$currentSHASign = $paramArray['SHASIGN'];
 			unset($paramArray['SHASIGN']);
-			$origSHASign = $this->createHash($sha1, $paramArray);
+			unset($shaFieldsArray['SHASIGN']);
 
-			if (
-				$currentSHASign == strtoupper($origSHASign) &&
-				$paramArray['IP'] == t3lib_div::getIndpEnv('REMOTE_ADDR')
-			) {
+			// Führe Berechnung aus und überprüfe mit SHASign von Concardis
+			$origSHASign = $this->createHash($sha1, $shaFieldsArray);
+			unset($shaFieldsArray);
+
+			if ($currentSHASign == $origSHASign) {
 				$result = $paramArray;
-			}
+ 			}
 		}
 		return $result;
 	} // readParams

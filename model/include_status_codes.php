@@ -1,0 +1,45 @@
+<?php
+
+$statusMessages = array(
+	'0' => 'Ungültig/Unvollständig',
+	'1' => 'Durch Kunden annulliert. Kehren Sie zum Shop zurück und löschen Sie das Cookie über Ihren Browser.',
+	'2' => 'Genehmigung verweigert',
+	'4' => 'Bestellung gespeichert',
+	'40' => '',
+	'41' => 'Erwartete Zahlung durch den Kunde',
+	'5' => 'Genehmigt',
+	'50' => '',
+	'51' => 'Genehmigung im Wartezustand',
+	'52' => 'Genehmigung nicht bekannt',
+	'55' => 'Stand-by',
+	'56' => 'OK mit planmäßigen Zahlungen',
+	'57' => '',
+	'59' => 'Authoriz. to get manually',
+	'6' => 'Genehmigt und storniert',
+	'61' => 'Annul. der Genehmigung im Wart.',
+	'62' => 'Annul. der Genehmigung unsicher',
+	'63' => 'Annul. der Genehmigung verweigert',
+	'64' => 'Genehmigt und storniert',
+	'7' => 'Zahlung gelöscht',
+	'71' => 'Löschung der Zahlung im Wart.',
+	'72' => 'Löschung der Zahlung unsicher',
+	'73' => 'Löschung der Zahlung verweigert',
+	'74' => 'Zahlung gelöscht',
+	'75' => 'Deletion processed by merchant',
+	'8' => 'Gutschrift',
+	'81' => 'Gutschrift im Wartezustand',
+	'82' => 'Gutschrift unsicher',
+	'83' => 'Gutschrift verweigert',
+	'84' => 'Payment declined by the acquirer',
+	'85' => 'Refund processed by merchant',
+	'9' => 'Zahlung beantragt',
+	'91' => 'Zahlung im Wartezustand',
+	'92' => 'Zahlung unsicher',
+	'93' => 'Bezahlung verweigert',
+	'94' => 'Refund declined by the acquirer',
+	'95' => 'Payment processed by merchant',
+	'99' => 'In Bearbeitung'
+);
+
+
+?>

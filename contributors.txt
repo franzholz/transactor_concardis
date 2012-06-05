@@ -1,0 +1,12 @@
+Franz Holzinger <franz@ttproducts.de>: software development and bug fixes
+Kai Bouché <kb@imc-web.de>: error and status codes, changes of the parameter type array
+
+
+
+
+
+
+
+
+
+
