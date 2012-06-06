@@ -48,15 +48,13 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 	protected $gatewayKey = 'transactor_concardis';
 	protected $extKey = 'transactor_concardis';
 	protected $supportedGatewayArray = array(TX_TRANSACTOR_GATEWAYMODE_FORM);
-	protected $sendBasket = FALSE;	// Submit detailled basket informations like single products
-
 
 		// Setup array for modifying the inputs
 	public function __construct () {
 
 		$conf = $this->getConf();
 		$result = parent::__construct();
-		$this->bSendBasket = $conf['sendBasket'];
+		$this->bSendBasket = $conf['bSendBasket'];
 		return $result;
 	}
 
@@ -69,11 +67,13 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 	 */
 	public function transaction_formGetActionURI () {
 		$conf = $this->getConf();
+
+		$result = FALSE;
+
 		if ($this->getGatewayMode() == TX_TRANSACTOR_GATEWAYMODE_FORM) {
 			$result = $conf['provideruri'] . 'orderstandard.asp';
-		} else {
-			$result = FALSE;
 		}
+
 		return $result;
 	}
 
@@ -308,7 +308,7 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 	private function getErrorMessage($errorCode) {
 
 		// Von: https://secure.payengine.de/ncol/paymentinfos5.asp
-		require_once("include_error_codes.php");
+		t3lib_div::requireOnce("include_error_codes.php");
 
 		if(isset($errorCodes[$errorCode])) {
 			return $errorCodes[$errorCode];
@@ -322,7 +322,7 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 	private function getStatusMessage($status) {
 
 		// Von: https://secure.payengine.de/ncol/paymentinfos5.asp
-		require_once("include_status_codes.php");
+		t3lib_div::requireOnce("include_status_codes.php");
 
 		if(isset($statusMessages[$status])) {
 			return $statusMessages[$status];
