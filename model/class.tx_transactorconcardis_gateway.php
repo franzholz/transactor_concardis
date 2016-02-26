@@ -2,7 +2,7 @@
 /***************************************************************
 *  Copyright notice
 *
-*  (c) 2010-2012 Franz Holzinger (franz@ttproducts.de)
+*  (c) 2010-2016 Franz Holzinger (franz@ttproducts.de)
 *  All rights reserved
 *
 *  This script is part of the Typo3 project. The Typo3 project is
@@ -40,8 +40,7 @@
  *
  */
 
-require_once (t3lib_extMgM::extPath('transactor') . 'model/class.tx_transactor_gateway.php');
-
+define(WRONG_AMOUNT_MSG, 'Received wrong amount');
 
 
 class tx_transactorconcardis_gateway extends tx_transactor_gateway {
@@ -78,7 +77,7 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 	}
 
 
-	// SHA Algorithm (Following Concardis-PDF Chapter 10.1)
+	// SHA Algorithm (Following Concardis-PDF ConCardis_e-Com-BAS_DE.pdf Chapter 5.2.1)
 	public function createHash ($sha1, $paramArray) {
 		$shaString = '';
 
@@ -96,11 +95,10 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 		}
 
 		// unique character sequence vor the validation of the control data
-		$digest = strtoupper(bin2hex(mhash(MHASH_SHA512, $shaString)));
+		$result = strtoupper(bin2hex(mhash(MHASH_SHA1, $shaString)));
 
 		// Hint: Test using https://secure.payengine.de/ncol/test/testsha.asp
-
-		return $digest;
+		return $result;
 	}
 
 
@@ -130,7 +128,7 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 		$description = implode(' ### ', $description);
 
 		$fieldsArray = array();
-		$fieldsArray = $this->config;
+		$fieldsArray = $this->getConfig();
 
 		// *************************************************************************************************************
 		//	HINWEIS: Die Kommentare zu den Feldern sind aus der Implementierungs-PDF von Concardis!
@@ -210,10 +208,10 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 
 		// URL der Webseite, die dem Kunden angezeigt werden soll, wenn er den Zahlungsvorgang abbricht Status 1).
 		// Wenn dieses Feld leer ist, bekommt der Kunde stattdessen die declineurl angezeigt.
-		$nFieldsArray['cancelurl'] = $detailsArray['transaction']['returi'];
+// 		$nFieldsArray['cancelurl'] = $detailsArray['transaction']['returi'];
 
 		// URL der Webseite, die dem Kunden angezeigt werden soll, wenn er auf unserer sicheren Zahlungsseite die
-		// Zurück-Schaltfläche anklickt.
+		// Zurück-Schaltfläche angeklickt.
 		$nFieldsArray['cancelurl'] = $detailsArray['transaction']['returi'];
 
 		// Parameter ohne Inhalt fliegen raus
@@ -243,7 +241,7 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 		$sha1 = $fieldsArray['SHA1'];
 		unset($fieldsArray['SHA1']); // do not publish the secret key
 
-		// Setze SHA-IN-Signatur (Concardis-PDF-Kapitel 10.1)
+		// Setze SHA-IN-Signatur (Concardis-PDF-Kapitel 5.2.1 Seite 10)
 		// -> Einmalige Zeichenkette zur Prüfung der Auftragsdaten.
 		$fieldsArray['SHASign'] = $this->createHash($sha1, $fieldsArray);
 
@@ -275,15 +273,30 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 					$reference == $theReference &&
 					( $paramArray['STATUS'] == 5 || $paramArray['STATUS'] == 9 )
 				) {
-					$result['state'] = TX_TRANSACTOR_TRANSACTION_STATE_APPROVE_OK;
-					$result['amount'] = doubleval($paramArray['amount']);
-					$result['message'] = $TYPO3_DB->fullQuoteStr(
-						$paramArray['CN'] . ';' . $paramArray['BRAND'] . ';' . $paramArray['CARDNO'] . ';' . $paramArray['PAYID'] . ';' . $paramArray['ED'] . ';' . $paramArray['TRXDATE'],
-						'tx_transactor_transactions');
+					if (
+						abs(
+							$paramArray['amount'] - $row['amount']
+						) <=
+						(
+							$row['amount'] / 1000 + 0.1 // There might be small differences between the paid amount and the amount from the shop.
+						) &&
+						$paramArray['currency'] == $row['currency']
+					) {
+						// The transaction has been processed correctly.
+						$result['user'] = ':' . $paramArray['ACCEPTANCE'];
+						$result['state'] = TX_TRANSACTOR_TRANSACTION_STATE_APPROVE_OK;
+						$result['message'] = $TYPO3_DB->fullQuoteStr(
+							$paramArray['CN'] . ';' . $paramArray['BRAND'] . ';' . $paramArray['CARDNO'] . ';' . $paramArray['PAYID'] . ';' . $paramArray['ED'] . ';' . $paramArray['TRXDATE'],
+							'tx_transactor_transactions');
+						$result['gatewayid'] = $paramArray['PAYID'] . ': ' . $paramArray['TRXDATE'] . ':' . $paramArray['IP'];
+					} else {
+						$result['message'] = WRONG_AMOUNT_MSG . ': ' . $detailsArray['mc_gross'];
+						$result['state'] = TX_TRANSACTOR_TRANSACTION_STATE_CREDIT_NOK;
+						$result['gatewayid'] = $paramArray['PAYID'] . ': ' . $paramArray['TRXDATE'] . ':' . $paramArray['IP'];
+					}
 				} else {
 					// Erhalte Status- und Fehlernachrichten
 					$message = 'Status: {' . $paramArray['STATUS'] . '} - ' . $this->getStatusMessage($paramArray['STATUS']);
-
 					if (!empty($paramArray['NCERROR'])) {
 						$message .= ', Error: {' . $paramArray['NCERROR'] . '} - ' . $this->getErrorMessage($paramArray['NCERROR']);
 					}
@@ -344,10 +357,6 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 
 		if ($orderID) {
 			$paramArray = array();
-// 			$paramTypeArray = array(
-// 				'orderID', 'currency', 'amount', 'PM', 'ACCEPTANCE', 'STATUS', 'CARDNO',
-// 				'ED', 'CN', 'TRXDATE', 'PAYID', 'NCERROR', 'BRAND', 'IPCTY', 'CCCTY',
-// 				'ECI', 'CVCCheck', 'AAVCheck', 'VC', 'IP', 'SHASIGN'
 
 			$paramTypeArray = array (
 				'orderID',    // Ihre Bestellnummer
@@ -361,9 +370,15 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 				'NCERROR',    // Fehlerwert
 				'BRAND',      // Kartenmarke (unser System leitet sie von der Kartennummer ab)
 				'ED',         // Kartenverfallsdatum
+				'ECI',        // Electronic Commerce Indicator - aus welcher Quelle eine Transaktion stammt
 				'TRXDATE',    // Transaktionsdatum
 				'CN',         // Name von Karteninhaber bzw. Kunde
 				'IP',         // IP
+				'IPCTY',      // IPCTY
+				'CCCTY',      // CCCTY
+				'CVCCheck',   //
+				'AAVCheck',   //
+				'VC',         //
 				'SHASIGN',	  // Von unserem System berechneter SHA-Ausgangscode (wenn SHA-OUT
 							  // konfiguriert ist)
 				'complus',	  // Feld für die Einreichung eines Wertes, den Sie in der Post-Sale-
@@ -381,22 +396,26 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 				$paramArray[$type] = t3lib_div::_GP($type);
 			}
 
+			$noCheckParamArray = array('nocheck'); // Falls es Parameter im SHA-OUT geben sollte, die nicht für den SHA-Key berücksichtigt werden dürfen
+
 			// Bearbeite nur gesetzte Werte
 			$shaFieldsArray = array();
 			foreach ($paramArray as $key => $value) {
 
-				if ($value != '') {
+				if (
+					$value != '' &&
+					!in_array($key, $noCheckParamArray)
+				) {
 					$shaFieldsArray[$key] = $value;
 				}
 			}
 
 			$sha1 = $conf['SHA1OUT'];
 
-			// Erhalte SHASign von Concardis
+			// von Concardis erhaltener SHASign
 			$currentSHASign = $paramArray['SHASIGN'];
 			unset($paramArray['SHASIGN']);
 			unset($shaFieldsArray['SHASIGN']);
-
 			// Führe Berechnung aus und überprüfe mit SHASign von Concardis
 			$origSHASign = $this->createHash($sha1, $shaFieldsArray);
 			unset($shaFieldsArray);
@@ -408,5 +427,3 @@ class tx_transactorconcardis_gateway extends tx_transactor_gateway {
 		return $result;
 	} // readParams
 }
-
-?>

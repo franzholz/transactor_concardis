@@ -1,5 +1,9 @@
 (add new changes on top of this file)
 
+2016-02-26 Franz Holzinger  <franz@fholzinger.com>
+	* adaptions to the current needs for the SHA1 key generation
+	* add a security check about the amount paid
+
 2012-06-05 Franz Holzinger  <franz@fholzinger.com>
 
 	* the following lines are contributions sent by imc (Patricia Schneider)

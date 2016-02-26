@@ -1,14 +1,8 @@
 <?php
 
-########################################################################
-# Extension Manager/Repository config file for ext "transactor_concardis".
-#
-# Auto generated 06-06-2012 10:40
-#
-# Manual updates:
-# Only the data in the array - everything else is removed by next
-# writing. "version" and "dependencies" must not be touched!
-########################################################################
+/***************************************************************
+ * Extension Manager/Repository config file for ext "transactor_concardis".
+ ***************************************************************/
 
 $EM_CONF[$_EXTKEY] = array(
 	'title' => 'Transactor ConCardis Gateway',
@@ -21,7 +15,7 @@ $EM_CONF[$_EXTKEY] = array(
 	'conflicts' => '',
 	'priority' => '',
 	'module' => '',
-	'state' => 'beta',
+	'state' => 'stable',
 	'internal' => '',
 	'uploadfolder' => 0,
 	'createDirs' => '',
@@ -29,12 +23,12 @@ $EM_CONF[$_EXTKEY] = array(
 	'clearCacheOnLoad' => 0,
 	'lockType' => '',
 	'author_company' => '',
-	'version' => '0.1.0',
+	'version' => '0.2.0',
 	'constraints' => array(
 		'depends' => array(
-			'php' => '5.2.0-0.0.0',
-			'typo3' => '4.3.0-4.7.99',
-			'transactor' => '0.1.2-',
+			'php' => '5.2.0-5.6.99',
+			'typo3' => '4.3.0-6.2.99',
+			'transactor' => '0.1.2-0.0.0',
 		),
 		'conflicts' => array(
 		),
@@ -46,4 +40,3 @@ $EM_CONF[$_EXTKEY] = array(
 	),
 );
 
-?>
